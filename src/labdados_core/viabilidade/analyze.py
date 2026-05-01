@@ -43,7 +43,9 @@ def analyze_form(form: dict[str, Any]) -> dict[str, Any]:
 
         - ``listagem``: ``"datajud"`` | ``"jurisprudencia"`` | ``"sentencas"``
         - ``tribunais_selecionados``: list[str] (ex.: ``["tjsp", "tjrj"]``)
-        - ``recorte_inicio``, ``recorte_fim``: ``"YYYY-MM-DD"`` ou vazio
+        - ``ano_inicio``, ``ano_fim``: int (inclusivos) ou ``None``/string
+          vazia. Recorte por ano-calendário — bate com o que ``juscraper``
+          expõe via ``ano_ajuizamento``.
         - Datajud-only: ``filtro_classes_cnj``, ``filtro_assuntos_cnj`` (texto
           livre — códigos numéricos, separados por vírgula ou linha).
         - jurisprudencia/sentencas: ``filtro_palavras_chave``.
@@ -63,8 +65,8 @@ def analyze_form(form: dict[str, Any]) -> dict[str, Any]:
     """
     listagem = str(form.get("listagem") or "")
     tribunais = [str(t).lower() for t in (form.get("tribunais_selecionados") or [])]
-    inicio = (form.get("recorte_inicio") or None) or None
-    fim = (form.get("recorte_fim") or None) or None
+    ano_inicio = _coerce_year(form.get("ano_inicio"))
+    ano_fim = _coerce_year(form.get("ano_fim"))
 
     results: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
@@ -73,7 +75,7 @@ def analyze_form(form: dict[str, Any]) -> dict[str, Any]:
         classes = _split_lines(form.get("filtro_classes_cnj"))
         assuntos = _split_lines(form.get("filtro_assuntos_cnj"))
         for code in tribunais:
-            r = _datajud_count(code, inicio, fim, classes, assuntos)
+            r = _datajud_count(code, ano_inicio, ano_fim, classes, assuntos)
             if "error" in r:
                 errors.append({"tribunal": code, "error": r["error"]})
             results.append(r)
@@ -146,3 +148,15 @@ def _split_lines(raw: Any) -> list[str]:
     if not raw:
         return []
     return [line.strip() for line in str(raw).replace(",", "\n").splitlines() if line.strip()]
+
+
+def _coerce_year(raw: Any) -> int | None:
+    """Aceita int, string numérica (``"2020"``) ou vazio — retorna ``None``
+    quando ausente/inválido. O frontend manda ``str`` (input type=number),
+    o SDK manda ``int``, ambos viram ``int``."""
+    if raw is None or raw == "":
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
