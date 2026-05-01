@@ -52,10 +52,25 @@ até bater 1.0.
 ## Por que `juscraper` é extra
 
 `juscraper` traz pandas, lxml, beautifulsoup, selenium-via-requests etc.
-~50MB instalado, lento de resolver via uv/pip. A maior parte dos pedidos
-de viabilidade é Datajud (que precisa só de `httpx`) — não vale a pena
-pagar esse custo de instalação por padrão. Quem quer jurisprudência ou
-sentenças instala `labdados-core[juscraper]`.
+~50MB instalado, lento de resolver via uv/pip. Hoje, todos os caminhos
+de `analyze_form` precisam do juscraper (Datajud via `contar_processos`,
+jurisprudência/sentenças via `cjsg`/`cjpg`). Mantemos `juscraper` em
+`[juscraper]` para que **outros usos futuros** do labdados-core (que
+não envolvam viabilidade) não paguem por essa dep — quem importa
+`labdados_core.viabilidade` instala o extra.
+
+## TODO — quando o PR jtrecenti/juscraper#177 for merged
+
+Hoje o `_datajud.py` tem um cliente HTTP próprio que duplica o que o
+`juscraper.scraper("datajud").contar_processos()` agora faz nativamente
+(PR jtrecenti/juscraper#177). Migração planejada:
+
+1. Bumpar pin: `juscraper>=0.X` (versão que inclui `contar_processos`).
+2. Substituir `_datajud.count_for_tribunal()` por chamada a
+   `juscraper.scraper("datajud").contar_processos(tribunal=..., ...)`.
+3. Apagar `_datajud.py` (e o `_DATAJUD_KEY` hardcoded).
+4. Bumpar `_version.py` (minor — sem mudança de assinatura no
+   `analyze_form`, mas mudança de dependência).
 
 ## Por que o template `.qmd` mora aqui
 
