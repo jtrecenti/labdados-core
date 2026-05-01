@@ -1,28 +1,28 @@
 """
-Cliente direto pra API pública do Datajud (Elasticsearch do CNJ).
+Contagem de processos no DataJud — wrapper fino sobre
+``juscraper.scraper("datajud").contar_processos`` (PR jtrecenti/juscraper#180).
 
-Vive como módulo privado: o público é :func:`labdados_core.viabilidade.analyze_form`,
-que orquestra Datajud + juscraper. Mantemos o ``_DATAJUD_KEY`` em código (é a
-mesma chave pública usada pelo juscraper, divulgada no portal do CNJ).
+Antes desta versão (labdados-core <= 0.3.0), o módulo tinha um cliente
+HTTP próprio que duplicava regras (alias, query DSL, fallback de 504,
+auth) já presentes no juscraper. Migrado para reusar tudo via API
+pública — o ``juscraper`` é a única fonte da verdade pra DataJud no
+ecossistema labdados.
+
+Nota sobre múltiplas classes
+----------------------------
+``juscraper.contar_processos`` aceita apenas **uma** ``classe: str``
+(não lista). Quando o form do escritório passa várias classes, fazemos
+N chamadas (uma por classe) e somamos as contagens. É ineficiente mas
+correto — se virar gargalo, abrimos PR no juscraper estendendo
+``classe`` pra ``str | list[str]``.
 """
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
-import httpx
-
-_DATAJUD_BASE = "https://api-publica.datajud.cnj.jus.br"
-_DATAJUD_KEY = "cDZHYzlZa0JadVREZDJCendQbXY6SkJlTzNjLV9TRENyQk1RdnFKZGRQdw=="
-
-
-def _alias(tribunal_code: str) -> str:
-    """``"tjsp"`` → ``"api_publica_tjsp"``."""
-    return f"api_publica_{tribunal_code.lower()}"
-
-
-def _digits(s: Any) -> str:
-    return "".join(c for c in str(s) if c.isdigit())
+logger = logging.getLogger(__name__)
 
 
 def count_for_tribunal(
@@ -31,56 +31,84 @@ def count_for_tribunal(
     fim: str | None,
     classes: list[str] | None,
     assuntos: list[str] | None,
-    *,
-    timeout: float = 30.0,
 ) -> dict[str, Any]:
-    """Conta processos no Datajud para um tribunal.
+    """Conta processos no DataJud para um tribunal.
 
-    Usa ``track_total_hits=True`` e ``size=0`` — só pega o ``hits.total``,
-    sem baixar documento nenhum. Recorte por data ISO ``YYYY-MM-DD``
-    (inclusivo nas duas pontas). Mapeia direto para
-    ``data_ajuizamento_inicio``/``_fim`` do juscraper (PR #176).
+    Recorte por data ISO ``YYYY-MM-DD`` (inclusivo). Múltiplas classes
+    viram N chamadas e somam.
 
     Retorna ``{"code", "count", "relation"}`` em caso de sucesso, ou
-    ``{"code", "error"}`` em falha de rede / 4xx / 5xx.
+    ``{"code", "error"}`` em falha (todas as chamadas falharam).
     """
-    must: list[dict[str, Any]] = []
-    if inicio or fim:
-        rng: dict[str, str] = {}
-        if inicio:
-            rng["gte"] = f"{inicio}T00:00:00.000Z"
-        if fim:
-            rng["lte"] = f"{fim}T23:59:59.999Z"
-        must.append({"range": {"dataAjuizamento": rng}})
-    if classes:
-        codes = [_digits(c) for c in classes if _digits(c)]
-        if codes:
-            must.append({"terms": {"classe.codigo": codes}})
-    if assuntos:
-        codes = [_digits(a) for a in assuntos if _digits(a)]
-        if codes:
-            must.append({"terms": {"assuntos.codigo": codes}})
-
-    payload: dict[str, Any] = {
-        "size": 0,
-        "track_total_hits": True,
-        "query": {"bool": {"must": must}} if must else {"match_all": {}},
-    }
-    url = f"{_DATAJUD_BASE}/{_alias(tribunal_code)}/_search"
     try:
-        resp = httpx.post(
-            url,
-            json=payload,
-            headers={"Authorization": f"APIKey {_DATAJUD_KEY}"},
-            timeout=timeout,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        total = data.get("hits", {}).get("total", {})
+        import juscraper as jus
+    except ImportError:
         return {
             "code": tribunal_code,
-            "count": int(total.get("value") or 0),
-            "relation": total.get("relation", "eq"),  # "eq" ou "gte"
+            "error": (
+                "juscraper não instalado. Instale com: "
+                "pip install labdados-core[juscraper]"
+            ),
         }
-    except Exception as exc:  # noqa: BLE001
-        return {"code": tribunal_code, "error": str(exc)[:200]}
+
+    scraper = jus.scraper("datajud")
+    scraper.set_verbose(0)
+
+    # Lista de classes — quando vazia, faz uma chamada sem ``classe``.
+    classes_iter: list[str | None] = list(classes) if classes else [None]
+
+    total_count = 0
+    relation = "eq"  # sobe pra "gte" se algum tribunal saturou
+    last_error: str | None = None
+    chamadas_ok = 0
+
+    for classe in classes_iter:
+        kwargs: dict[str, Any] = {"tribunal": tribunal_code.upper()}
+        if inicio:
+            kwargs["data_ajuizamento_inicio"] = inicio
+        if fim:
+            kwargs["data_ajuizamento_fim"] = fim
+        if classe:
+            kwargs["classe"] = classe
+        if assuntos:
+            kwargs["assuntos"] = assuntos
+
+        try:
+            df = scraper.contar_processos(**kwargs)
+        except Exception as exc:  # noqa: BLE001
+            last_error = f"{type(exc).__name__}: {str(exc)[:160]}"
+            logger.warning(
+                "datajud_contar_failed: %s classe=%s err=%s",
+                tribunal_code, classe, last_error,
+            )
+            continue
+
+        if df.empty:
+            last_error = "juscraper devolveu DataFrame vazio"
+            continue
+
+        row = df.iloc[0]
+        # juscraper.contar_processos devolve {tribunal, alias, count, relation, error}
+        # com count/error mutuamente exclusivos.
+        row_error = row.get("error")
+        if row_error and row.get("count") is None:
+            last_error = str(row_error)[:200]
+            continue
+
+        count_val = row.get("count")
+        if count_val is not None:
+            total_count += int(count_val)
+            chamadas_ok += 1
+            if row.get("relation") == "gte":
+                relation = "gte"
+
+    if chamadas_ok == 0:
+        return {
+            "code": tribunal_code,
+            "error": last_error or "todas as chamadas ao juscraper falharam",
+        }
+    return {
+        "code": tribunal_code,
+        "count": total_count,
+        "relation": relation,
+    }

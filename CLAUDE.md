@@ -49,28 +49,20 @@ pacote PyPI). Para evitar surpresas:
 Os dois consumidores devem **pinar** este pacote em range `>=0.1,<0.2`
 até bater 1.0.
 
-## Por que `juscraper` é extra
+## `juscraper` é dependência direta (desde v0.4.0)
 
-`juscraper` traz pandas, lxml, beautifulsoup, selenium-via-requests etc.
-~50MB instalado, lento de resolver via uv/pip. Hoje, todos os caminhos
-de `analyze_form` precisam do juscraper (Datajud via `contar_processos`,
-jurisprudência/sentenças via `cjsg`/`cjpg`). Mantemos `juscraper` em
-`[juscraper]` para que **outros usos futuros** do labdados-core (que
-não envolvam viabilidade) não paguem por essa dep — quem importa
-`labdados_core.viabilidade` instala o extra.
+Antes da v0.4.0, `juscraper` ficava em `[juscraper]` extra porque
+`analyze_form` chamava DataJud via cliente HTTP próprio (`_datajud.py`)
+e só usava juscraper pra cjsg/cjpg. Migrado em v0.4.0 — todos os
+caminhos passam por juscraper, que vira dep direta:
 
-## TODO — quando o PR jtrecenti/juscraper#177 for merged
+- DataJud → `juscraper.scraper("datajud").contar_processos(...)`
+  (PR [jtrecenti/juscraper#180](https://github.com/jtrecenti/juscraper/pull/180)).
+- Jurisprudência/sentenças → `juscraper.scraper(<sigla>).cjsg/cjpg(...)`.
 
-Hoje o `_datajud.py` tem um cliente HTTP próprio que duplica o que o
-`juscraper.scraper("datajud").contar_processos()` agora faz nativamente
-(PR jtrecenti/juscraper#177). Migração planejada:
-
-1. Bumpar pin: `juscraper>=0.X` (versão que inclui `contar_processos`).
-2. Substituir `_datajud.count_for_tribunal()` por chamada a
-   `juscraper.scraper("datajud").contar_processos(tribunal=..., ...)`.
-3. Apagar `_datajud.py` (e o `_DATAJUD_KEY` hardcoded).
-4. Bumpar `_version.py` (minor — sem mudança de assinatura no
-   `analyze_form`, mas mudança de dependência).
+Eliminou ~120 linhas de cliente HTTP duplicado e o `_DATAJUD_KEY`
+hardcoded. Mudou só a assinatura interna; `analyze_form` e
+`render_report` ficaram byte-equivalentes.
 
 ## Por que o template `.qmd` mora aqui
 

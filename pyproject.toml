@@ -1,6 +1,6 @@
 [project]
 name = "labdados-core"
-version = "0.3.0"
+version = "0.4.0"
 description = "Núcleo compartilhado entre o backend do escritório de apoio do LabDados e o SDK Python labdados — lógica que precisa ficar idêntica nos dois lados (análise de viabilidade, regras de veredito, template do relatório)."
 readme = "README.md"
 license = { text = "MIT" }
@@ -19,25 +19,25 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering",
 ]
-# Mínimo absoluto: httpx para Datajud, jinja2 para renderizar o relatório.
-# juscraper fica opcional porque só é usado em listagens de jurisprudência
-# e sentenças — pesado de instalar (~50MB de deps).
+# jinja2 para renderizar o template do relatório; juscraper para
+# **todas** as chamadas a tribunais (Datajud + cjsg/cjpg). Antes da
+# v0.4.0 o Datajud era HTTP direto via httpx, mas isso duplicava regras
+# que o juscraper já tinha (alias, payload ES, fallback 504, auth) — ver
+# jtrecenti/juscraper#180.
 dependencies = [
-    "httpx>=0.27,<1.0",
     "jinja2>=3.1",
+    # juscraper precisa do PR jtrecenti/juscraper#180 (data_ajuizamento_inicio/fim
+    # em contar_processos), ainda não publicado no PyPI. Apontando pro main —
+    # quando sair release com >=0.3, troca pra "juscraper>=0.3".
+    "juscraper @ git+https://github.com/jtrecenti/juscraper@main",
 ]
 
 [project.optional-dependencies]
-# Análise de listagem por jurisprudência (cjsg) ou sentenças (cjpg).
-# Sem este extra, apenas listagem='datajud' funciona.
-juscraper = [
-    "juscraper>=0.2",
-]
 # Para renderização do PDF é necessário também o binário do Quarto +
 # Typst no sistema (não dá pra empacotar via pip). Sem o Quarto, o
 # render_report devolve só o markdown.
 all = [
-    "labdados-core[juscraper]",
+    "labdados-core",
 ]
 dev = [
     "pytest>=8",
@@ -49,6 +49,11 @@ dev = [
 Homepage = "https://github.com/lab-dados/labdados-core"
 Repository = "https://github.com/lab-dados/labdados-core"
 Issues = "https://github.com/lab-dados/labdados-core/issues"
+
+[tool.hatch.metadata]
+# Necessário pro git+https em dependencies enquanto juscraper>=0.3
+# não está no PyPI.
+allow-direct-references = true
 
 [build-system]
 requires = ["hatchling"]
