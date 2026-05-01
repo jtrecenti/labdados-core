@@ -55,8 +55,8 @@ def test_datajud_count_with_results():
             "listagem": "datajud",
             "tribunais_selecionados": ["tjsp"],
             "filtro_classes_cnj": "7",
-            "ano_inicio": 2020,
-            "ano_fim": 2024,
+            "recorte_inicio": "2020-01-01",
+            "recorte_fim": "2024-12-31",
         }
     )
     assert out["total_aproximado"] == 12345
@@ -114,8 +114,8 @@ def test_render_report_returns_md_even_without_quarto(monkeypatch, tmp_path):
             "filtro_classes_cnj": "7",
             "filtro_assuntos_cnj": "",
             "filtro_grau": [],
-            "ano_inicio": "",
-            "ano_fim": "",
+            "recorte_inicio": "",
+            "recorte_fim": "",
         },
         results={
             "listagem": "datajud",

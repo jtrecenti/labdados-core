@@ -25,7 +25,7 @@ format:
 
 > {{ form.descricao_pesquisa | replace('\n', '\n> ') }}
 
-**Recorte temporal:** {% if form.ano_inicio or form.ano_fim %}{{ form.ano_inicio or "(início aberto)" }} a {{ form.ano_fim or "(fim aberto)" }}{% else %}*sem recorte de datas*{% endif %}
+**Recorte temporal:** {% if form.recorte_inicio or form.recorte_fim %}{{ form.recorte_inicio or "(início aberto)" }} → {{ form.recorte_fim or "(fim aberto)" }}{% else %}*sem recorte de datas*{% endif %}
 
 **Tribunais selecionados ({{ form.tribunais_selecionados | length }}):** {{ form.tribunais_selecionados | join(", ") | upper }}
 

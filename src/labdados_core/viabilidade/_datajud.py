@@ -27,8 +27,8 @@ def _digits(s: Any) -> str:
 
 def count_for_tribunal(
     tribunal_code: str,
-    ano_inicio: int | None,
-    ano_fim: int | None,
+    inicio: str | None,
+    fim: str | None,
     classes: list[str] | None,
     assuntos: list[str] | None,
     *,
@@ -37,20 +37,20 @@ def count_for_tribunal(
     """Conta processos no Datajud para um tribunal.
 
     Usa ``track_total_hits=True`` e ``size=0`` — só pega o ``hits.total``,
-    sem baixar documento nenhum. Recorte por ano-calendário (inclusivo):
-    ``ano_inicio=2020, ano_fim=2024`` cobre 1º de janeiro de 2020 a 31 de
-    dezembro de 2024. Bate com o filtro ``ano_ajuizamento`` do juscraper.
+    sem baixar documento nenhum. Recorte por data ISO ``YYYY-MM-DD``
+    (inclusivo nas duas pontas). Mapeia direto para
+    ``data_ajuizamento_inicio``/``_fim`` do juscraper (PR #176).
 
     Retorna ``{"code", "count", "relation"}`` em caso de sucesso, ou
     ``{"code", "error"}`` em falha de rede / 4xx / 5xx.
     """
     must: list[dict[str, Any]] = []
-    if ano_inicio or ano_fim:
+    if inicio or fim:
         rng: dict[str, str] = {}
-        if ano_inicio:
-            rng["gte"] = f"{ano_inicio}-01-01T00:00:00.000Z"
-        if ano_fim:
-            rng["lte"] = f"{ano_fim}-12-31T23:59:59.999Z"
+        if inicio:
+            rng["gte"] = f"{inicio}T00:00:00.000Z"
+        if fim:
+            rng["lte"] = f"{fim}T23:59:59.999Z"
         must.append({"range": {"dataAjuizamento": rng}})
     if classes:
         codes = [_digits(c) for c in classes if _digits(c)]
