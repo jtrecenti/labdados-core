@@ -31,7 +31,7 @@ dependencies = [
 # Análise de listagem por jurisprudência (cjsg) ou sentenças (cjpg).
 # Sem este extra, apenas listagem='datajud' funciona.
 juscraper = [
-    "juscraper>=0.4",
+    "juscraper>=0.2",
 ]
 # Para renderização do PDF é necessário também o binário do Quarto +
 # Typst no sistema (não dá pra empacotar via pip). Sem o Quarto, o
