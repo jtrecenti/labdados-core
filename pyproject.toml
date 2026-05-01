@@ -46,9 +46,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/jtrecenti/labdados-core"
-Repository = "https://github.com/jtrecenti/labdados-core"
-Issues = "https://github.com/jtrecenti/labdados-core/issues"
+Homepage = "https://github.com/lab-dados/labdados-core"
+Repository = "https://github.com/lab-dados/labdados-core"
+Issues = "https://github.com/lab-dados/labdados-core/issues"
 
 [build-system]
 requires = ["hatchling"]

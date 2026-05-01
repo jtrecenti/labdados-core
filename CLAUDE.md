@@ -4,7 +4,7 @@ Núcleo Python compartilhado entre dois repositórios:
 
 - [`escritorio-servicos`](https://github.com/jtrecenti/escritorio-servicos)
   (backend FastAPI + Container Apps + worker)
-- [`labdados-sdk`](https://github.com/jtrecenti/labdados-sdk)
+- [`labdados-sdk`](https://github.com/lab-dados/labdados-sdk)
   (SDK Python externo — `pip install labdados`)
 
 ## A regra de ouro
@@ -75,7 +75,7 @@ Quando precisar mudar algo aqui:
 1. **Mude aqui** (`labdados-core`), com testes.
 2. Bumpe `_version.py`.
 3. Publique tag → CI publica no PyPI (workflow de release ainda a montar
-   — por enquanto `pip install git+https://github.com/jtrecenti/labdados-core`).
+   — por enquanto `pip install git+https://github.com/lab-dados/labdados-core`).
 4. Suba o pin nos dois consumidores em PRs simultâneos.
 
 Não dá pra pular o passo 1 — se você "patchear" diretamente em

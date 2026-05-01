@@ -2,7 +2,7 @@
 
 Núcleo Python compartilhado entre o **backend** do escritório de apoio do
 LabDados ([`escritorio-servicos`](https://github.com/jtrecenti/escritorio-servicos))
-e o **SDK Python** ([`labdados-sdk`](https://github.com/jtrecenti/labdados-sdk)).
+e o **SDK Python** ([`labdados-sdk`](https://github.com/lab-dados/labdados-sdk)).
 
 ## O que mora aqui
 
