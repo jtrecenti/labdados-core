@@ -1,0 +1,135 @@
+---
+title: "Relatório de Viabilidade — Levantamento de Dados"
+subtitle: "{{ request_meta.researcher_name }} ({{ request_meta.institution }})"
+date: "{{ generated_at }}"
+format:
+  typst:
+    margin:
+      x: 2cm
+      y: 2cm
+    fontsize: 10pt
+    toc: false
+  gfm:
+    preview-mode: raw
+---
+
+::: {.callout-note}
+**ID do pedido:** `{{ request_id }}`
+**Tipo de listagem:** {{ form.listagem }}
+**Veredito automático:** **{{ results.verdict | upper }}**
+:::
+
+## 1. Pedido
+
+**Descrição da pesquisa:**
+
+> {{ form.descricao_pesquisa | replace('\n', '\n> ') }}
+
+**Recorte temporal:** {% if form.recorte_inicio or form.recorte_fim %}{{ form.recorte_inicio or "(início aberto)" }} → {{ form.recorte_fim or "(fim aberto)" }}{% else %}*sem recorte de datas*{% endif %}
+
+**Tribunais selecionados ({{ form.tribunais_selecionados | length }}):** {{ form.tribunais_selecionados | join(", ") | upper }}
+
+{% if form.outros_fontes_descricao %}
+**Outras fontes informadas:** {{ form.outros_fontes_descricao }}
+{% endif %}
+
+{% if form.listagem == 'datajud' %}
+**Filtros (Datajud):**
+
+- Classes: {{ form.filtro_classes_cnj or "(nenhuma)" }}
+- Assuntos: {{ form.filtro_assuntos_cnj or "(nenhum)" }}
+- Grau (informativo): {{ (form.filtro_grau or []) | join(", ") or "(todos)" }}
+
+{% else %}
+**Palavras-chave:** {{ form.filtro_palavras_chave or "(vazio)" }}
+{% endif %}
+
+## 2. Resultado da consulta a tribunais
+
+{% if results.tribunais %}
+
+| Tribunal | Resultados | Tipo |
+|----------|-----------:|------|
+{%- for t in results.tribunais %}
+| **{{ t.code | upper }}** | {% if t.count is defined %}{{ "{:,}".format(t.count).replace(",", ".") }}{% else %}—{% endif %} | {% if t.relation == "eq" %}exato{% elif t.relation == "gte" %}≥ (truncado){% elif t.relation == "first_page" %}1ª página{% elif t.error %}erro{% else %}{{ t.relation or "?" }}{% endif %} |
+{%- endfor %}
+
+{% if results.total_aproximado %}
+**Total aproximado (somando tribunais com contagem exata):**
+**{{ "{:,}".format(results.total_aproximado).replace(",", ".") }}** processos.
+{% endif %}
+
+{% else %}
+*Nenhum tribunal foi consultado com sucesso.*
+{% endif %}
+
+{% if results.errors %}
+
+### 2.1 Erros encontrados
+
+{% for e in results.errors %}
+- `{{ e.tribunal }}`: {{ e.error }}
+{% endfor %}
+
+{% endif %}
+
+## 3. Análise
+
+{% for h in results.highlights %}
+- {{ h }}
+{% endfor %}
+
+{% if form.listagem == 'datajud' %}
+
+### Notas sobre o Datajud
+
+- A API pública do CNJ retorna **metadados** dos processos (classe, assunto,
+  movimentações, partes anonimizadas, órgão julgador, datas) — **não** retorna
+  o texto integral de decisões/sentenças.
+- A cobertura por tribunal varia: cada tribunal alimenta o Datajud com
+  periodicidade própria, podendo haver lag de semanas/meses em relação ao
+  publicado nos próprios sites.
+- Processos sigilosos não aparecem na API pública.
+- Não há limite "duro" de 10.000 registros por consulta — esse número é o
+  cap de hits por *página* (paginado pelo cliente).
+
+{% elif form.listagem == 'jurisprudencia' %}
+
+### Notas sobre a coleta de jurisprudência
+
+- A coleta usa o ``cjsg`` do `juscraper` para cada tribunal selecionado.
+- A "contagem" mostrada acima é o n. de itens da **1ª página** retornada pela
+  busca pública — a maior parte dos tribunais não expõe um total agregado.
+- Use o resultado como indicação de viabilidade (havia hits para esses termos
+  no(s) tribunal(is) durante o intervalo). O total real só é conhecido após a
+  coleta completa.
+
+{% elif form.listagem == 'sentencas' %}
+
+### Notas sobre a coleta de sentenças (1º grau)
+
+- Disponível apenas em tribunais com banco público de sentenças
+  (atualmente: TJSP, TJES e TJTO no `juscraper`).
+- A "contagem" reflete a 1ª página da busca pública.
+
+{% endif %}
+
+## 4. Próximos passos sugeridos
+
+{% if results.verdict == 'viable' %}
+A combinação de filtros e tribunais parece exequível. Recomenda-se aprovar
+e iniciar a coleta na sequência.
+{% elif results.verdict == 'caveats' %}
+A coleta é viável, mas com ressalvas. Recomenda-se discutir com o pesquisador
+antes de iniciar — em particular volume e/ou cobertura.
+{% else %}
+A coleta como descrita não é viável. Sugere-se rejeitar e abrir um diálogo
+com o pesquisador para reformular o pedido.
+{% endif %}
+
+---
+
+*Relatório gerado automaticamente pelo Escritório de Apoio LabDados — FGV
+Direito SP, em {{ generated_at }}. Para extrair campos estruturados das
+decisões/processos coletados, use o serviço de **Estruturação de Textos**
+do portal.*
