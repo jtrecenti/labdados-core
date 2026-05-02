@@ -1,6 +1,6 @@
 [project]
 name = "labdados-core"
-version = "0.7.0"
+version = "0.8.0"
 description = "Núcleo compartilhado entre o backend do escritório de apoio do LabDados e o SDK Python labdados — lógica que precisa ficar idêntica nos dois lados (análise de viabilidade, regras de veredito, template do relatório)."
 readme = "README.md"
 license = { text = "MIT" }
@@ -51,6 +51,24 @@ estruturacao = [
     # surpresas se eles afrouxarem o pin no futuro.)
     "pandas>=2.0",
 ]
+# OCR CPU: PyMuPDF abre/renderiza o PDF; pytesseract chama o binário do
+# Tesseract (instalado pelo OS — não vem via pip). Suficiente para a
+# maioria dos PDFs nativos ou scans bem feitos. Sem GPU.
+ocr-cpu = [
+    "pymupdf>=1.24",
+    "pytesseract>=0.3.10",
+    "Pillow>=10.0",
+]
+# OCR GPU: PaddleOCR 3.x — mais preciso em layouts complexos (tabelas,
+# colunas, scans ruidosos). Roda em CPU se a GPU não estiver disponível,
+# mas vale muito menos a pena. PyMuPDF segue necessário para abrir o PDF.
+ocr-gpu = [
+    "paddleocr>=3.0,<4",
+    "pymupdf>=1.24",
+    # numpy vem como dep do paddleocr — não pinamos aqui para não brigar
+    # com pandas (puxado pelo extra [estruturacao]). PaddleOCR 3.x aceita
+    # numpy 2.x; manter pin obriga rebuild source de numpy 1.26.
+]
 all = [
     "labdados-core[estruturacao]",
 ]
@@ -65,6 +83,11 @@ dev = [
     "pandas>=2.0",
     # Para o test de integração rodar com OPENAI_API_KEY do .env.
     "python-dotenv>=1.0",
+    # Para os tests de OCR — usamos pymupdf para gerar fixtures e
+    # mockar pytesseract. Pillow vem como transitive de pytesseract.
+    "pymupdf>=1.24",
+    "pytesseract>=0.3.10",
+    "Pillow>=10.0",
 ]
 
 [project.urls]

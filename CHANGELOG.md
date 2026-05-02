@@ -8,6 +8,40 @@ versionamento seguindo [SemVer](https://semver.org/lang/pt-BR/) — ver
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-05-02
+
+### Adicionado
+- Subpacote `labdados_core.ocr` — pipeline de OCR compartilhado entre
+  o SDK (modo local) e o serviço `services/ocr` no escritório:
+  - `pipeline.extract(pdf, *, modelo, languages, dpi, deskew,
+    bw_fallback, use_gpu)` — recebe bytes/Path, devolve `list[str]`
+    (uma string por página). Tenta texto nativo primeiro; só roda OCR
+    em páginas sem texto embutido.
+  - Engines via lazy import por extra:
+    - `ocr-cpu`: PyMuPDF + pytesseract (`modelo="pymupdf-tesseract"`).
+    - `ocr-gpu`: PaddleOCR 3.x (`modelo="paddleocr"`).
+  - `bw_fallback` (default `True`): re-OCR em preto-e-branco quando o
+    Tesseract devolve vazio — resgata scans de baixo contraste sem
+    pagar opencv.
+  - `formatters.join_pages(pages, *, output_format)` e
+    `formatters.build_pages_zip(files_data, *, output_format)` —
+    consolidam o empacotamento (txt único pro SDK, zip por página pro
+    serviço).
+  - `_tesseract.configure_tesseract_command()` — discovery do binário
+    no Windows (env `TESSERACT_CMD`, `which`, fallback em
+    `C:\Program Files\Tesseract-OCR`).
+  - Exceções: `EngineUnavailable` (extra ausente),
+    `TesseractNotFound` (binário ausente).
+- Novos extras `[ocr-cpu]` e `[ocr-gpu]`.
+
+### Notas
+- `services/ocr/main.py` e `labdados.ocr` ainda usam suas
+  implementações próprias — migração para chamar o core fica para PR
+  posterior. O pipeline é byte-equivalente ao que ambos faziam.
+- `numpy` voltou a ser sem pin (era `<2` no `[ocr-gpu]`); paddleocr
+  3.x aceita numpy 2.x e o pin colidia com pandas (puxado por
+  `[estruturacao]`).
+
 ## [0.7.0] - 2026-05-02
 
 ### Mudado
