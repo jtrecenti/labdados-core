@@ -7,3 +7,6 @@ dist/
 .pytest_cache/
 .ruff_cache/
 .DS_Store
+# Lock file não é commitado em libs publicáveis — cada consumidor resolve
+# suas próprias deps. Se isso virar app/binário, reverter.
+uv.lock

@@ -1,20 +1,19 @@
 [project]
 name = "labdados-core"
-version = "0.4.0"
+version = "0.5.0"
 description = "Núcleo compartilhado entre o backend do escritório de apoio do LabDados e o SDK Python labdados — lógica que precisa ficar idêntica nos dois lados (análise de viabilidade, regras de veredito, template do relatório)."
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
     { name = "LabDados / FGV Direito SP", email = "labdados.direitosp@fgv.br" },
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering",
@@ -26,6 +25,7 @@ classifiers = [
 # jtrecenti/juscraper#180.
 dependencies = [
     "jinja2>=3.1",
+    "pydantic>=2.7",
     # juscraper precisa do PR jtrecenti/juscraper#180 (data_ajuizamento_inicio/fim
     # em contar_processos), ainda não publicado no PyPI. Apontando pro main —
     # quando sair release com >=0.3, troca pra "juscraper>=0.3".
@@ -41,6 +41,7 @@ all = [
 ]
 dev = [
     "pytest>=8",
+    "pytest-cov>=5",
     "ruff>=0.6",
     "respx>=0.21",
 ]
@@ -67,7 +68,7 @@ packages = ["src/labdados_core"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B"]
