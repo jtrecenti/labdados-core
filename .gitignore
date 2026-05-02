@@ -7,6 +7,10 @@ dist/
 .pytest_cache/
 .ruff_cache/
 .DS_Store
+# Segredos locais (OPENAI_API_KEY etc.) — nunca commitar.
+.env
+.env.*
+!.env.example
 # Lock file não é commitado em libs publicáveis — cada consumidor resolve
 # suas próprias deps. Se isso virar app/binário, reverter.
 uv.lock

@@ -1,6 +1,6 @@
 [project]
 name = "labdados-core"
-version = "0.6.0"
+version = "0.7.0"
 description = "Núcleo compartilhado entre o backend do escritório de apoio do LabDados e o SDK Python labdados — lógica que precisa ficar idêntica nos dois lados (análise de viabilidade, regras de veredito, template do relatório)."
 readme = "README.md"
 license = { text = "MIT" }
@@ -37,8 +37,19 @@ dependencies = [
 # do Quarto + Typst no sistema (não dá pra empacotar via pip). Sem o
 # Quarto, o render_report devolve só o markdown.
 estruturacao = [
-    "openai>=1.40",
+    # DataFrameIt orquestra DataFrame -> LLM -> Pydantic com paralelização,
+    # retry e checkpoint built-in. Usa langchain-openai por baixo (cobre
+    # OpenAI, Azure OpenAI e qualquer endpoint OpenAI-compatible via
+    # base_url custom — vLLM, Ollama, LM Studio).
+    # Para outros providers: instalar dataframeit[google] ou [anthropic]
+    # adicionalmente.
+    "dataframeit[openai]>=0.6",
+    # openpyxl pra readers de .xlsx.
     "openpyxl>=3.1",
+    # pandas pra normalizar inputs em DataFrame antes de chamar dataframeit.
+    # (já vem como dep transitiva do dataframeit, mas pinamos para evitar
+    # surpresas se eles afrouxarem o pin no futuro.)
+    "pandas>=2.0",
 ]
 all = [
     "labdados-core[estruturacao]",
@@ -48,9 +59,12 @@ dev = [
     "pytest-cov>=5",
     "ruff>=0.6",
     "respx>=0.21",
-    # Para os tests de estruturação que mockam o openai SDK.
-    "openai>=1.40",
+    # Para os tests de estruturação (mockam dataframeit / openai SDK).
+    "dataframeit[openai]>=0.6",
     "openpyxl>=3.1",
+    "pandas>=2.0",
+    # Para o test de integração rodar com OPENAI_API_KEY do .env.
+    "python-dotenv>=1.0",
 ]
 
 [project.urls]
@@ -83,3 +97,6 @@ ignore = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "integration: testa contra serviços reais (OpenAI, etc.) — requer credenciais",
+]

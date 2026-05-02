@@ -1,26 +1,34 @@
-"""Cliente LLM unificado para os três caminhos que usamos hoje.
+"""Configuração de LLM e wrappers de chamada.
 
-Os três providers que aparecem no projeto são todos OpenAI-compatible
-no nível da API:
+Todos os providers que aparecem no projeto são OpenAI-compatible no
+nível da API:
 
 - **OpenAI** direto — ``provider="openai"``.
-- **Azure OpenAI** — ``provider="azure_openai"`` + ``azure_endpoint``,
-  ``api_version``, ``deployment``.
+- **Azure OpenAI** — ``provider="azure_openai"`` + ``base_url`` (azure
+  endpoint), ``api_version``, ``model`` (= deployment name).
 - **OpenAI-compat self-host** (vLLM em Container Apps, Ollama local,
   LM Studio, OpenRouter) — ``provider="openai_compat"`` + ``base_url``.
 
-O cliente real é sempre o ``openai`` SDK; o que varia é como
-instanciar. Centralizar essa decisão aqui evita que cada consumidor
-reimplemente a mesma matriz de if/else.
+A função :func:`to_dataframeit_kwargs` mapeia :class:`LlmConfig` para os
+kwargs aceitos por ``dataframeit()``, que por baixo usa
+``langchain.init_chat_model`` — o ``base_url`` vai dentro de
+``model_kwargs`` e ``init_chat_model`` repassa pra
+``ChatOpenAI``/``AzureChatOpenAI``.
+
+A função :func:`call_llm` mantém um cliente OpenAI direto para casos
+em que se quer uma única chamada chat completion sem o overhead do
+DataFrameIt (DataFrame + tqdm + threadpool). É o caminho usado por
+``services/structuring/main.py`` quando processa um doc por vez.
 
 Notas operacionais:
 
 - ``stream=True`` é **necessário** para vLLM atrás do ingress do Azure
   Container Apps — gerações longas sem stream batem em "stream timeout"
   ~240s mesmo com ``timeout=None`` no cliente.
-- Quando há ``schema`` válido, usamos ``response_format={"type":
-  "json_schema", ...}`` (structured outputs / guided decoding); senão,
-  caímos para ``json_object``.
+- Quando há ``schema`` válido, ``call_llm`` usa
+  ``response_format={"type": "json_schema", ...}`` (structured outputs
+  / guided decoding); senão, ``json_object``. ``estruturar`` (via
+  DataFrameIt) usa Pydantic structured output, que é equivalente.
 """
 
 from __future__ import annotations
@@ -103,6 +111,68 @@ def _parse_json(content: str) -> dict[str, Any]:
         return json.loads(content or "{}")
     except json.JSONDecodeError:
         return {"_raw_response": content}
+
+
+def to_dataframeit_kwargs(config: LlmConfig) -> dict[str, Any]:
+    """Mapeia :class:`LlmConfig` para kwargs aceitos por ``dataframeit()``.
+
+    DataFrameIt repassa ``model_kwargs`` para ``langchain.init_chat_model``;
+    é lá que ``base_url`` (vLLM/Ollama) e ``azure_endpoint`` viram
+    parâmetros do cliente subjacente.
+
+    O parâmetro ``provider`` segue a nomenclatura LangChain:
+
+    - ``"openai"`` (cobre OpenAI direto **e** OpenAI-compat self-host
+      via ``model_kwargs={"base_url": ...}``).
+    - ``"azure_openai"`` para Azure OpenAI.
+    - Qualquer outro string é repassado direto pro
+      ``init_chat_model`` (``"google_genai"``, ``"anthropic"``, etc.).
+    """
+    model_kwargs: dict[str, Any] = {}
+    if config.temperature is not None:
+        model_kwargs["temperature"] = config.temperature
+    if config.max_tokens is not None:
+        model_kwargs["max_tokens"] = config.max_tokens
+    if config.timeout is not None:
+        model_kwargs["timeout"] = config.timeout
+    if config.stream:
+        model_kwargs["streaming"] = True
+    model_kwargs.update(config.extra)
+
+    if config.provider == "openai_compat":
+        # langchain init_chat_model não tem provider "openai_compat" — para
+        # endpoints OpenAI-compatible, usar "openai" + base_url.
+        if config.base_url:
+            model_kwargs["base_url"] = config.base_url
+        return {
+            "provider": "openai",
+            "model": config.model,
+            "api_key": config.api_key or "EMPTY",
+            "model_kwargs": model_kwargs,
+        }
+
+    if config.provider == "azure_openai":
+        if not config.base_url:
+            raise ValueError("azure_openai requer base_url (azure endpoint)")
+        if not config.api_version:
+            raise ValueError("azure_openai requer api_version")
+        model_kwargs["azure_endpoint"] = config.base_url
+        model_kwargs["api_version"] = config.api_version
+        return {
+            "provider": "azure_openai",
+            "model": config.model,
+            "api_key": config.api_key,
+            "model_kwargs": model_kwargs,
+        }
+
+    if config.base_url:
+        model_kwargs["base_url"] = config.base_url
+    return {
+        "provider": config.provider,
+        "model": config.model,
+        "api_key": config.api_key,
+        "model_kwargs": model_kwargs,
+    }
 
 
 def call_llm(

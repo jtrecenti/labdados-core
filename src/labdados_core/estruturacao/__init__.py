@@ -25,15 +25,19 @@ A intenção futura é trocar isto por
 ``.dev-notes/dataframeit-issue-draft.md`` no repo do escritório.
 """
 
-from labdados_core.estruturacao._llm import LlmConfig, call_llm
+from labdados_core.estruturacao._llm import LlmConfig, call_llm, to_dataframeit_kwargs
 from labdados_core.estruturacao.pipeline import estruturar
 from labdados_core.estruturacao.prompts import build_messages
 from labdados_core.estruturacao.readers import read_document
+from labdados_core.estruturacao.schema_utils import UnsupportedSchema, ensure_pydantic_model
 
 __all__ = [
     "LlmConfig",
+    "UnsupportedSchema",
     "build_messages",
     "call_llm",
+    "ensure_pydantic_model",
     "estruturar",
     "read_document",
+    "to_dataframeit_kwargs",
 ]

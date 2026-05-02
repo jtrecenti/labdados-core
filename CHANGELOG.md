@@ -8,6 +8,41 @@ versionamento seguindo [SemVer](https://semver.org/lang/pt-BR/) — ver
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-05-02
+
+### Mudado
+- `labdados_core.estruturacao.estruturar` passa a usar
+  [DataFrameIt](https://brunodcdo.com.br/dataframeit/) internamente.
+  Ganha paralelização (`parallel_requests=N`), retry com backoff, rate-limit
+  detection e structured output via Pydantic — tudo built-in.
+- Schema agora aceita **`BaseModel` Pydantic** ou JSON Schema dict
+  (convertido em Pydantic dinamicamente via novo
+  `schema_utils.ensure_pydantic_model`). A superfície atual do SDK
+  (`estruturacao(schema=dict, ...)`) continua funcionando sem mudança
+  para o usuário final.
+- Novo helper `_llm.to_dataframeit_kwargs(LlmConfig)` mapeia a config
+  unificada para os kwargs que `dataframeit()` espera. Mantém OpenAI,
+  Azure OpenAI e endpoints OpenAI-compatible (vLLM/Ollama/LM Studio,
+  via `provider="openai_compat"` que vira `provider="openai"` +
+  `model_kwargs={"base_url": ...}` no LangChain).
+
+### Adicionado
+- `schema_utils.ensure_pydantic_model` + `UnsupportedSchema`. Cobre
+  `string/integer/number/boolean`, `array` com items simples, `object`
+  aninhado, e `enum` (vira `Literal`). Construções avançadas
+  (`anyOf/oneOf/$ref`) levantam erro com mensagem útil.
+- Novo extra dep `dataframeit[openai]>=0.6` em `[estruturacao]`.
+- Tests de integração em `tests/test_estruturacao_integration.py`
+  rodam com `OPENAI_API_KEY` real (skipa se ausente). Marker
+  `pytest.mark.integration` permite filtrar com `-m "not integration"`.
+- `.env` adicionado ao `.gitignore`.
+
+### Mantido (sem mudança de API)
+- `call_llm`, `build_messages`, `read_document`, `LlmConfig` continuam
+  exportados e funcionando — `services/structuring/main.py` ainda os
+  consome diretamente. Migração pra `estruturar()` (que ganha o
+  paralelismo) fica para um PR posterior.
+
 ## [0.6.0] - 2026-05-02
 
 ### Adicionado

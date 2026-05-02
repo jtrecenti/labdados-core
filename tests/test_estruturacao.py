@@ -7,7 +7,6 @@ não dependam de chave nem de rede.
 from __future__ import annotations
 
 import io
-import json
 import zipfile
 from typing import Any
 from unittest.mock import MagicMock
@@ -212,75 +211,315 @@ def test_read_docx_extracts_paragraphs():
 
 
 # ---------------------------------------------------------------------------
-# pipeline (estruturar)
+# schema_utils (JSON Schema -> Pydantic)
 # ---------------------------------------------------------------------------
 
 
-def _patch_call_llm(monkeypatch, returns: dict[str, Any] | list[dict[str, Any]]):
-    """Substitui call_llm para que estruturar() não toque rede."""
+from pydantic import BaseModel  # noqa: E402
+
+from labdados_core.estruturacao import UnsupportedSchema, ensure_pydantic_model  # noqa: E402
+
+
+class _Sample(BaseModel):
+    a: str
+    b: int | None = None
+
+
+def test_ensure_pydantic_model_passes_through_basemodel():
+    assert ensure_pydantic_model(_Sample) is _Sample
+
+
+def test_ensure_pydantic_model_converts_simple_dict():
+    schema = {
+        "type": "object",
+        "properties": {
+            "nome": {"type": "string", "description": "nome do autor"},
+            "idade": {"type": "integer"},
+        },
+        "required": ["nome"],
+    }
+    Model = ensure_pydantic_model(schema)
+    assert issubclass(Model, BaseModel)
+    fields = Model.model_fields
+    assert fields["nome"].is_required()
+    assert fields["nome"].description == "nome do autor"
+    assert not fields["idade"].is_required()
+
+
+def test_ensure_pydantic_model_handles_array_and_nested():
+    schema = {
+        "type": "object",
+        "properties": {
+            "tags": {"type": "array", "items": {"type": "string"}},
+            "endereco": {
+                "type": "object",
+                "properties": {
+                    "cidade": {"type": "string"},
+                    "uf": {"type": "string"},
+                },
+                "required": ["cidade"],
+            },
+        },
+    }
+    Model = ensure_pydantic_model(schema)
+    instance = Model(tags=["a", "b"], endereco={"cidade": "São Paulo", "uf": "SP"})
+    assert instance.tags == ["a", "b"]
+    assert instance.endereco.cidade == "São Paulo"
+
+
+def test_ensure_pydantic_model_rejects_unsupported_construct():
+    with pytest.raises(UnsupportedSchema, match="anyOf"):
+        ensure_pydantic_model(
+            {"type": "object", "properties": {"x": {"anyOf": [{"type": "string"}]}}}
+        )
+
+
+def test_ensure_pydantic_model_rejects_non_object_root():
+    with pytest.raises(UnsupportedSchema, match="type=object"):
+        ensure_pydantic_model({"type": "string"})
+
+
+def test_ensure_pydantic_model_handles_enum_as_literal():
+    schema = {
+        "type": "object",
+        "properties": {"status": {"type": "string", "enum": ["a", "b", "c"]}},
+        "required": ["status"],
+    }
+    Model = ensure_pydantic_model(schema)
+    from pydantic import ValidationError
+
+    Model(status="a")  # ok
+    with pytest.raises(ValidationError):
+        Model(status="d")
+
+
+def test_ensure_pydantic_model_rejects_non_dict_non_class():
+    with pytest.raises(TypeError):
+        ensure_pydantic_model("not a schema")  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
+# to_dataframeit_kwargs
+# ---------------------------------------------------------------------------
+
+
+from labdados_core.estruturacao import to_dataframeit_kwargs  # noqa: E402
+
+
+def test_to_dataframeit_kwargs_openai_basic():
+    kwargs = to_dataframeit_kwargs(LlmConfig(model="gpt-4o-mini", api_key="sk-x"))
+    assert kwargs["provider"] == "openai"
+    assert kwargs["model"] == "gpt-4o-mini"
+    assert kwargs["api_key"] == "sk-x"
+    assert kwargs["model_kwargs"]["temperature"] == 0.0
+
+
+def test_to_dataframeit_kwargs_openai_compat_uses_base_url():
+    kwargs = to_dataframeit_kwargs(
+        LlmConfig(
+            provider="openai_compat",
+            model="llama3.1",
+            base_url="http://localhost:11434/v1",
+            api_key="ollama",
+        )
+    )
+    assert kwargs["provider"] == "openai"  # langchain só conhece "openai"
+    assert kwargs["model_kwargs"]["base_url"] == "http://localhost:11434/v1"
+    assert kwargs["api_key"] == "ollama"
+
+
+def test_to_dataframeit_kwargs_azure_openai():
+    kwargs = to_dataframeit_kwargs(
+        LlmConfig(
+            provider="azure_openai",
+            model="gpt-4.1-mini",
+            api_key="azure-key",
+            base_url="https://x.openai.azure.com/",
+            api_version="2024-12-01-preview",
+        )
+    )
+    assert kwargs["provider"] == "azure_openai"
+    assert kwargs["model_kwargs"]["azure_endpoint"] == "https://x.openai.azure.com/"
+    assert kwargs["model_kwargs"]["api_version"] == "2024-12-01-preview"
+
+
+def test_to_dataframeit_kwargs_azure_requires_base_url():
+    with pytest.raises(ValueError, match="base_url"):
+        to_dataframeit_kwargs(
+            LlmConfig(provider="azure_openai", model="m", api_version="2024-12-01")
+        )
+
+
+def test_to_dataframeit_kwargs_azure_requires_api_version():
+    with pytest.raises(ValueError, match="api_version"):
+        to_dataframeit_kwargs(
+            LlmConfig(provider="azure_openai", model="m", base_url="https://x")
+        )
+
+
+# ---------------------------------------------------------------------------
+# pipeline (estruturar) — mocka dataframeit
+# ---------------------------------------------------------------------------
+
+
+def _patch_dataframeit(monkeypatch, side_effect=None, error_per_text=None):
+    """Substitui dataframeit() por uma fake que devolve um DataFrame plausível.
+
+    Se ``side_effect`` for um dict {texto: dict_de_campos}, cada linha do
+    DataFrame de entrada vira uma linha no DataFrame de saída com esses
+    campos. Se ``error_per_text`` for um dict {texto: msg}, popula
+    ``_error_details`` para essas linhas.
+    """
+
     calls: list[Any] = []
-    seq = returns if isinstance(returns, list) else [returns]
-    iterator = iter(seq)
 
-    def fake(messages, *, config, schema=None):
-        calls.append({"messages": messages, "schema": schema, "config": config})
-        try:
-            return next(iterator)
-        except StopIteration:
-            return seq[-1]
+    def fake(df, *, questions, prompt, text_column, **kwargs):
+        calls.append(
+            {
+                "df": df.copy(),
+                "questions": questions,
+                "prompt": prompt,
+                "text_column": text_column,
+                "kwargs": kwargs,
+            }
+        )
+        out = df.copy()
+        # popula campos do model com o valor do mock por texto
+        field_names = list(questions.model_fields.keys())
+        for fn in field_names:
+            out[fn] = None
+        if side_effect:
+            for i, txt in enumerate(out[text_column]):
+                if txt in side_effect:
+                    for fn, val in side_effect[txt].items():
+                        out.at[out.index[i], fn] = val
+        if error_per_text:
+            out["_error_details"] = None
+            for i, txt in enumerate(out[text_column]):
+                if txt in error_per_text:
+                    out.at[out.index[i], "_error_details"] = error_per_text[txt]
+        return out
 
-    monkeypatch.setattr("labdados_core.estruturacao.pipeline.call_llm", fake)
+    monkeypatch.setattr("labdados_core.estruturacao.pipeline.dataframeit", fake, raising=False)
+    # dataframeit é importado dentro de _run_dataframeit. Para garantir que o
+    # patch pegue, sobrescreve no módulo dataframeit também.
+    import dataframeit as _df_mod
+
+    monkeypatch.setattr(_df_mod, "dataframeit", fake)
     return calls
 
 
 def test_estruturar_single_string(monkeypatch):
-    calls = _patch_call_llm(monkeypatch, {"x": 1})
-    result = estruturar("texto", llm_config=LlmConfig(model="m"))
-    assert result == [{"x": 1, "_doc_id": "doc_1"}]
+    calls = _patch_dataframeit(monkeypatch, side_effect={"texto": {"a": "ok"}})
+    result = estruturar("texto", schema=_Sample, llm_config=LlmConfig(model="m"))
+    assert len(result) == 1
+    assert result[0]["_doc_id"] == "doc_1"
+    assert result[0]["a"] == "ok"
     assert len(calls) == 1
 
 
 def test_estruturar_list_of_strings_assigns_ids(monkeypatch):
-    _patch_call_llm(monkeypatch, [{"i": 1}, {"i": 2}])
-    result = estruturar(["a", "b"], llm_config=LlmConfig(model="m"))
+    _patch_dataframeit(monkeypatch, side_effect={"a": {"a": "x"}, "b": {"a": "y"}})
+    result = estruturar(["a", "b"], schema=_Sample, llm_config=LlmConfig(model="m"))
     assert [r["_doc_id"] for r in result] == ["doc_1", "doc_2"]
 
 
 def test_estruturar_preserves_explicit_doc_ids(monkeypatch):
-    _patch_call_llm(monkeypatch, [{"i": 1}, {"i": 2}])
+    _patch_dataframeit(
+        monkeypatch, side_effect={"texto a": {"a": "1"}, "texto b": {"a": "2"}}
+    )
     result = estruturar(
         [("alfa", "texto a"), ("beta", "texto b")],
+        schema=_Sample,
         llm_config=LlmConfig(model="m"),
     )
     assert [r["_doc_id"] for r in result] == ["alfa", "beta"]
 
 
 def test_estruturar_skips_empty_text(monkeypatch):
-    calls = _patch_call_llm(monkeypatch, {"never": "called"})
-    result = estruturar(["", "  "], llm_config=LlmConfig(model="m"))
+    calls = _patch_dataframeit(monkeypatch, side_effect={})
+    result = estruturar(["", "  "], schema=_Sample, llm_config=LlmConfig(model="m"))
     assert all(r["_error"] == "documento vazio" for r in result)
-    assert calls == []  # LLM nunca chamado
+    assert calls == []  # dataframeit nem foi chamado (só docs vazios)
 
 
-def test_estruturar_captures_per_doc_errors(monkeypatch):
-    def fake(messages, *, config, schema=None):
-        if "fail" in messages[-1]["content"]:
-            raise RuntimeError("boom")
-        return {"ok": True}
-
-    monkeypatch.setattr("labdados_core.estruturacao.pipeline.call_llm", fake)
-    result = estruturar(["bom", "fail aqui"], llm_config=LlmConfig(model="m"))
-    assert result[0] == {"ok": True, "_doc_id": "doc_1"}
-    assert result[1]["_error"] == "boom"
-    assert result[1]["_doc_id"] == "doc_2"
+def test_estruturar_mixed_empty_and_valid(monkeypatch):
+    _patch_dataframeit(monkeypatch, side_effect={"bom": {"a": "ok"}})
+    result = estruturar(["", "bom"], schema=_Sample, llm_config=LlmConfig(model="m"))
+    assert result[0]["_error"] == "documento vazio"
+    assert result[1]["a"] == "ok"
 
 
-def test_estruturar_passes_schema_through(monkeypatch):
-    calls = _patch_call_llm(monkeypatch, {"x": 1})
-    schema = {"type": "object"}
-    estruturar("t", schema=schema, llm_config=LlmConfig(model="m"))
-    assert calls[0]["schema"] == schema
-    # E o build_messages injetou o schema na user message:
-    user_msg = calls[0]["messages"][1]["content"]
-    assert "Schema esperado:" in user_msg
-    assert json.dumps(schema, ensure_ascii=False) in user_msg
+def test_estruturar_captures_dataframeit_exception(monkeypatch):
+    def fake(df, *, questions, prompt, text_column, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(
+        "labdados_core.estruturacao.pipeline.dataframeit", fake, raising=False
+    )
+    import dataframeit as _df_mod
+
+    monkeypatch.setattr(_df_mod, "dataframeit", fake)
+
+    result = estruturar(["a", "b"], schema=_Sample, llm_config=LlmConfig(model="m"))
+    assert all(r["_error"] == "boom" for r in result)
+
+
+def test_estruturar_propagates_per_row_error_from_df(monkeypatch):
+    _patch_dataframeit(
+        monkeypatch,
+        side_effect={"bom": {"a": "ok"}},
+        error_per_text={"falha": "rate limit"},
+    )
+    result = estruturar(
+        ["bom", "falha"], schema=_Sample, llm_config=LlmConfig(model="m")
+    )
+    assert result[0]["a"] == "ok"
+    assert result[1]["_error"] == "rate limit"
+
+
+def test_estruturar_accepts_dict_schema(monkeypatch):
+    """JSON Schema dict é aceito (convertido pra Pydantic internamente)."""
+    schema_dict = {
+        "type": "object",
+        "properties": {"resumo": {"type": "string"}},
+        "required": ["resumo"],
+    }
+    calls = _patch_dataframeit(monkeypatch, side_effect={"texto": {"resumo": "ok"}})
+    result = estruturar(
+        "texto", schema=schema_dict, llm_config=LlmConfig(model="m")
+    )
+    assert result[0]["resumo"] == "ok"
+    # Verifica que o dataframeit recebeu uma classe Pydantic, não o dict.
+    assert issubclass(calls[0]["questions"], BaseModel)
+
+
+def test_estruturar_passes_system_prompt_in_template(monkeypatch):
+    calls = _patch_dataframeit(monkeypatch, side_effect={"t": {"a": "x"}})
+    estruturar(
+        "t",
+        schema=_Sample,
+        system_prompt="extraia decisões judiciais",
+        llm_config=LlmConfig(model="m"),
+    )
+    sent_prompt = calls[0]["prompt"]
+    assert "extraia decisões judiciais" in sent_prompt
+    assert "{texto}" in sent_prompt  # placeholder preservado pra dataframeit
+
+
+def test_estruturar_passes_llm_config_through(monkeypatch):
+    calls = _patch_dataframeit(monkeypatch, side_effect={"t": {"a": "x"}})
+    estruturar(
+        "t",
+        schema=_Sample,
+        llm_config=LlmConfig(
+            provider="openai_compat",
+            model="llama3.1",
+            base_url="http://localhost:11434/v1",
+            api_key="ollama",
+        ),
+    )
+    df_kwargs = calls[0]["kwargs"]
+    assert df_kwargs["provider"] == "openai"
+    assert df_kwargs["model"] == "llama3.1"
+    assert df_kwargs["model_kwargs"]["base_url"] == "http://localhost:11434/v1"
