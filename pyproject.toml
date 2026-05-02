@@ -1,6 +1,6 @@
 [project]
 name = "labdados-core"
-version = "0.5.0"
+version = "0.6.0"
 description = "Núcleo compartilhado entre o backend do escritório de apoio do LabDados e o SDK Python labdados — lógica que precisa ficar idêntica nos dois lados (análise de viabilidade, regras de veredito, template do relatório)."
 readme = "README.md"
 license = { text = "MIT" }
@@ -33,17 +33,24 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Para renderização do PDF é necessário também o binário do Quarto +
-# Typst no sistema (não dá pra empacotar via pip). Sem o Quarto, o
-# render_report devolve só o markdown.
+# Para renderização do PDF de viabilidade é necessário também o binário
+# do Quarto + Typst no sistema (não dá pra empacotar via pip). Sem o
+# Quarto, o render_report devolve só o markdown.
+estruturacao = [
+    "openai>=1.40",
+    "openpyxl>=3.1",
+]
 all = [
-    "labdados-core",
+    "labdados-core[estruturacao]",
 ]
 dev = [
     "pytest>=8",
     "pytest-cov>=5",
     "ruff>=0.6",
     "respx>=0.21",
+    # Para os tests de estruturação que mockam o openai SDK.
+    "openai>=1.40",
+    "openpyxl>=3.1",
 ]
 
 [project.urls]

@@ -8,6 +8,33 @@ versionamento seguindo [SemVer](https://semver.org/lang/pt-BR/) — ver
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-02
+
+### Adicionado
+- Subpacote `labdados_core.estruturacao` — núcleo compartilhado entre
+  `services/structuring` e `labdados.estruturacao` (modo local). Substitui
+  os prompts/readers/cliente OpenAI duplicados nos dois lados:
+  - `prompts.build_messages(system, text, schema, *, schema_position)` —
+    posição do schema configurável (`"user"` default, `"system"` legacy SDK).
+  - `_llm.LlmConfig` + `_llm.call_llm(...)` — cliente unificado para
+    OpenAI, Azure OpenAI e endpoints OpenAI-compatible (vLLM, Ollama,
+    LM Studio). Suporta streaming (necessário no caminho Container Apps
+    → vLLM) e `response_format=json_schema` (structured outputs / guided
+    decoding) quando há schema válido.
+  - `readers.read_document(content, filename, *, csv_text_column)` — lê
+    `.txt/.md/.docx/.csv/.xlsx` para `[(doc_id, texto), ...]`.
+  - `pipeline.estruturar(textos, *, schema, system_prompt, llm_config)` —
+    orquestra read → prompt → LLM → parse. Erros viram `{"_error": ...}`
+    no resultado em vez de levantar.
+- Novo extra `labdados-core[estruturacao]` (`openai>=1.40`, `openpyxl>=3.1`).
+
+### Notas
+- Backend e SDK ainda redefinem essa lógica localmente; consumir o core
+  em ambos é a próxima fase (PRs 2/PR 3 do plano).
+- Avaliação de [DataFrameIt](https://brunodcdo.com.br/dataframeit/) como
+  núcleo futuro está em pausa — issue de discussão em aberto, ver
+  `escritorio-servicos/.dev-notes/dataframeit-issue-draft.md`.
+
 ## [0.5.0] - 2026-05-02
 
 ### Mudado (breaking)
