@@ -14,22 +14,32 @@ Núcleo Python compartilhado entre dois repositórios:
 Se uma função é específica de um deles (cliente HTTP do SDK, worker da fila
 do backend, FastAPI app, etc.), ela **não** vem. Nem por DRY.
 
-Hoje só a análise de viabilidade está aqui. Conforme aparecer duplicação
-genuína, abrir um módulo novo seguindo o padrão de `viabilidade/`:
+## Subpacotes hoje
+
+| Subpacote | O que faz | Extras |
+|---|---|---|
+| `contracts` | Pydantic models compartilhados (`FileMetadata`, `ProcessRequest/Response`, `JobStatus`, `ViabilityForm/Results`, `Verdict`). | (nenhum) |
+| `viabilidade` | `analyze_form` + `render_report` (Datajud + juscraper + Quarto). | (nenhum) |
+| `estruturacao` | Pipeline LLM via DataFrameIt + readers (`txt/md/docx/csv/xlsx`) + prompts canônicos + `LlmConfig` cobrindo OpenAI/Azure/vLLM/Ollama. | `[estruturacao]` |
+| `ocr` | `extract` com 2 engines (`pymupdf-tesseract` / `paddleocr`), `formatters.join_pages`/`build_pages_zip`, descoberta automática do binário Tesseract. | `[ocr-cpu]` ou `[ocr-gpu]` |
+| `transcricao` | Formatadores TXT/SRT/VTT compartilhados, helpers de timestamp e `Segment` TypedDict. | (nenhum — engine fica nos consumidores) |
+
+Para adicionar um subpacote novo, siga o padrão de `viabilidade/`:
 
 - pasta com `__init__.py` re-exportando a API pública,
-- `analyze.py` (lógica pura) + helpers privados em `_*.py`,
+- `pipeline.py` ou `analyze.py` (lógica pura) + helpers privados em `_*.py`,
 - `templates/<nome>.qmd` se houver render Quarto,
-- testes em `tests/test_<nome>.py`.
+- testes em `tests/test_<nome>.py`,
+- entrada nova em `pyproject.toml` se trouxer dep pesada (extra opcional).
 
 ## O que **não** vem pra cá
 
 - Cliente HTTP do SDK → `labdados-sdk/src/labdados/client.py`.
 - Routers FastAPI, `services_catalog`, `email`, `storage` → backend.
-- OCR/transcrição/estruturação locais do SDK — são implementações
-  **diferentes** das do backend (`services/<svc>/`), não duplicações.
-  PaddleOCR + vLLM + Container Apps GPU vivem só no backend; tesseract +
-  faster-whisper + ollama vivem só no SDK.
+- Engines de transcrição pesados (WhisperX, pyannote.audio, ffmpeg
+  chunking pra OOM-protection) — divergem entre service e SDK
+  intencionalmente.
+- vLLM client direto, Container Apps GPU specifics — só no backend.
 
 ## Versionamento e compatibilidade
 
