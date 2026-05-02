@@ -8,6 +8,28 @@ versionamento seguindo [SemVer](https://semver.org/lang/pt-BR/) — ver
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-05-02
+
+### Adicionado
+- Subpacote `labdados_core.transcricao` — formatters compartilhados
+  entre o SDK e `services/transcription`:
+  - `Segment` (TypedDict) — formato comum entre engines.
+  - `format_timestamp_srt` / `format_timestamp_vtt` — incluem ms.
+  - `format_segments(segments, *, output_format, include_timestamps,
+    with_speaker)` — devolve string única em txt/srt/vtt, com suporte
+    opcional a speaker (diarização).
+
+### Notas
+- Cobre apenas o que estava **acidentalmente** duplicado entre os dois
+  lados (formato + helpers de timestamp). O **engine** de transcrição
+  fica onde está: o SDK usa faster-whisper simples; o serviço usa
+  faster-whisper com chunking ffmpeg para OOM-protection + WhisperX
+  com diarização pyannote. Cada lado tem complexidade própria que
+  justifica não unificar agora.
+- Sem novos extras opcionais — formatters são puro Python.
+- Quem migrava da versão do SDK ganha **milissegundos** no SRT (era
+  truncado em segundos antes). Mais detalhado, não quebra parsers.
+
 ## [0.8.0] - 2026-05-02
 
 ### Adicionado
