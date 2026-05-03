@@ -1,6 +1,6 @@
 [project]
 name = "labdados-core"
-version = "0.9.0"
+version = "0.9.1"
 description = "Núcleo compartilhado entre o backend do escritório de apoio do LabDados e o SDK Python labdados — lógica que precisa ficar idêntica nos dois lados (análise de viabilidade, regras de veredito, template do relatório)."
 readme = "README.md"
 license = { text = "MIT" }
@@ -26,10 +26,9 @@ classifiers = [
 dependencies = [
     "jinja2>=3.1",
     "pydantic>=2.7",
-    # juscraper precisa do PR jtrecenti/juscraper#180 (data_ajuizamento_inicio/fim
-    # em contar_processos), ainda não publicado no PyPI. Apontando pro main —
-    # quando sair release com >=0.3, troca pra "juscraper>=0.3".
-    "juscraper @ git+https://github.com/jtrecenti/juscraper@main",
+    # juscraper>=0.3 traz data_ajuizamento_inicio/fim em contar_processos
+    # (PR #180, lançado em 2026-05-03 junto desta release).
+    "juscraper>=0.3,<1.0",
 ]
 
 [project.optional-dependencies]
@@ -94,11 +93,6 @@ dev = [
 Homepage = "https://github.com/lab-dados/labdados-core"
 Repository = "https://github.com/lab-dados/labdados-core"
 Issues = "https://github.com/lab-dados/labdados-core/issues"
-
-[tool.hatch.metadata]
-# Necessário pro git+https em dependencies enquanto juscraper>=0.3
-# não está no PyPI.
-allow-direct-references = true
 
 [build-system]
 requires = ["hatchling"]

@@ -8,6 +8,22 @@ versionamento seguindo [SemVer](https://semver.org/lang/pt-BR/) — ver
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-05-03
+
+### Mudado
+- **Primeira release no PyPI.** `juscraper @ git+https://...` virou
+  `juscraper>=0.3,<1.0` em `[project.dependencies]` (juscraper 0.3.0 saiu
+  hoje no PyPI, com os filtros do PR #180 incluídos).
+- Removido `[tool.hatch.metadata] allow-direct-references = true` —
+  não há mais direct refs.
+- README e Changelog passam a apontar para `lab-dados/...` (org real)
+  em vez de `labdados/...` (não existente).
+
+### Adicionado
+- `RELEASING.md` com procedimento de release via Trusted Publisher.
+- `.github/workflows/release.yml` — publica em PyPI via OIDC quando
+  uma tag `v*` é empurrada.
+
 ## [0.9.0] - 2026-05-02
 
 ### Adicionado

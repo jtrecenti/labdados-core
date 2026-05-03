@@ -1,7 +1,7 @@
 # labdados-core
 
 Núcleo Python compartilhado entre o **backend** do escritório de apoio do
-LabDados ([`escritorio-servicos`](https://github.com/labdados/escritorio-servicos))
+LabDados ([`escritorio-servicos`](https://github.com/lab-dados/escritorio-servicos))
 e o **SDK Python** ([`labdados-sdk`](https://github.com/lab-dados/labdados-sdk)).
 
 A regra: tudo que precisa ficar **byte-equivalente** entre os dois lados
