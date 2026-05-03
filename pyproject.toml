@@ -1,6 +1,6 @@
 [project]
 name = "labdados-core"
-version = "0.9.1"
+version = "0.10.0"
 description = "Núcleo compartilhado entre o backend do escritório de apoio do LabDados e o SDK Python labdados — lógica que precisa ficar idêntica nos dois lados (análise de viabilidade, regras de veredito, template do relatório)."
 readme = "README.md"
 license = { text = "MIT" }
@@ -67,6 +67,25 @@ ocr-gpu = [
     # numpy vem como dep do paddleocr — não pinamos aqui para não brigar
     # com pandas (puxado pelo extra [estruturacao]). PaddleOCR 3.x aceita
     # numpy 2.x; manter pin obriga rebuild source de numpy 1.26.
+]
+# Anonimização CPU: openai/privacy-filter via HF Transformers, sem CUDA.
+# Funciona pra dev local e modo SDK local. ~10x mais lento que GPU; ok
+# pra textos curtos (<5k chars). transformers >=4.45 traz suporte a
+# model.config.id2label estável.
+anonimizacao-cpu = [
+    "transformers>=4.45",
+    "torch>=2.2",
+    "tokenizers>=0.20",
+]
+# Anonimização GPU: mesma lib, mas em produção (Container Apps T4) o
+# torch precisa vir com CUDA. NÃO pinar aqui — o Dockerfile do
+# services/anonimizacao instala torch CUDA via index URL específico
+# (https://download.pytorch.org/whl/cu121). Este extra existe para
+# documentar a intenção; o consumidor real é o Dockerfile.
+anonimizacao-gpu = [
+    "transformers>=4.45",
+    "torch>=2.2",
+    "tokenizers>=0.20",
 ]
 all = [
     "labdados-core[estruturacao]",
