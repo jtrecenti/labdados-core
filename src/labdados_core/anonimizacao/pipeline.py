@@ -11,7 +11,6 @@ Aceita um único texto ou uma lista (com IDs opcionais), e devolve um
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
 
 from labdados_core.anonimizacao._engine import detectar_pii
 from labdados_core.anonimizacao.strategies import (

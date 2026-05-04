@@ -187,7 +187,7 @@ def detectar_pii(
             )
         cur_label = cur_start = cur_end = None
 
-    for i, (label_id, (off_s, off_e)) in enumerate(zip(all_label_ids, offsets)):
+    for i, (label_id, (off_s, off_e)) in enumerate(zip(all_label_ids, offsets, strict=False)):
         label = id2label.get(int(label_id), "O") if isinstance(id2label, dict) else id2label[int(label_id)]
         score = all_scores[i] if i < len(all_scores) else 1.0
         if label == "O" or off_s == off_e or score < threshold:
