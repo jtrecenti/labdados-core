@@ -1,11 +1,19 @@
 """Anonimização de PII em texto — núcleo compartilhado.
 
-Detecta e mascara dados pessoais usando o modelo
-`openai/privacy-filter <https://huggingface.co/openai/privacy-filter>`_,
-um classificador de tokens (BIOES) com 8 categorias de PII:
-``account_number``, ``private_address``, ``private_email``,
-``private_person``, ``private_phone``, ``private_url``,
-``private_date``, ``secret``.
+Detecta e mascara dados pessoais com classificadores de tokens. Dois
+modelos suportados:
+
+- `openai/privacy-filter <https://huggingface.co/openai/privacy-filter>`_
+  — multilíngue, 8 categorias PII (``account_number``,
+  ``private_address``, ``private_email``, ``private_person``,
+  ``private_phone``, ``private_url``, ``private_date``, ``secret``),
+  1.5B params.
+- `pierreguillou/ner-bert-base-cased-pt-lenerbr
+  <https://huggingface.co/pierreguillou/ner-bert-base-cased-pt-lenerbr>`_
+  — BERT base PT-BR fine-tuned em LeNER-Br (decisões judiciais), 6
+  categorias (``PESSOA``, ``ORGANIZACAO``, ``LOCAL``, ``TEMPO``,
+  ``LEGISLACAO``, ``JURISPRUDENCIA``), 110M params, foco jurídico
+  brasileiro.
 
 Componentes:
 

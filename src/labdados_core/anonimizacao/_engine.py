@@ -27,11 +27,12 @@ if TYPE_CHECKING:  # pragma: no cover — apenas type hints
 
 log = logging.getLogger(__name__)
 
-# Tamanho máximo de janela do modelo. O modelo aceita 128k, mas o tokenizer
-# do HF e a memória do dispositivo são quem mandam. Quebrar em janelas
-# de 2k subtokens com overlap de 128 cobre textos longos sem estourar VRAM.
-_WINDOW = 2048
-_OVERLAP = 128
+# Janela default. ``openai/privacy-filter`` aceita 128k, e textos longos
+# rodam confortáveis em janelas de 2k subtokens com overlap de 128 sem
+# estourar VRAM. Para modelos BERT-base (max 512 posições), :func:`detectar_pii`
+# clampa estes valores baseado em ``tokenizer.model_max_length``.
+_WINDOW_DEFAULT = 2048
+_OVERLAP_DEFAULT = 128
 
 
 def _resolve_device(use_gpu: bool) -> str:
@@ -101,12 +102,18 @@ def detectar_pii(
 
     import torch
 
+    # BERT-style models (com CLS/SEP) precisam dos special tokens pro
+    # primeiro/último token herdar a representação correta — sem eles, a
+    # primeira palavra do texto fica colada no embedding posicional 0
+    # (treinado pra [CLS]) e o modelo erra labels nela. Modelos
+    # decoder-only / encoder sem CLS (privacy-filter) não usam.
+    use_specials = bool(getattr(tokenizer, "cls_token_id", None) is not None)
     encoding = tokenizer(
         texto,
         return_offsets_mapping=True,
         return_tensors="pt",
         truncation=False,
-        add_special_tokens=False,
+        add_special_tokens=use_specials,
     )
     offsets = encoding.pop("offset_mapping")[0].tolist()
     input_ids = encoding["input_ids"][0]
@@ -115,15 +122,23 @@ def detectar_pii(
     if n_tokens == 0:
         return []
 
+    # Clamp window ao max-position-embedding do modelo. BERT-base tem 512.
+    # Reservamos 8 pra eventual special token; overlap proporcional.
+    tok_max = getattr(tokenizer, "model_max_length", _WINDOW_DEFAULT)
+    if not isinstance(tok_max, int) or tok_max <= 0 or tok_max > 100_000:
+        tok_max = _WINDOW_DEFAULT
+    window = min(_WINDOW_DEFAULT, max(64, tok_max - 8))
+    overlap = min(_OVERLAP_DEFAULT, max(8, window // 16))
+
     id2label = model.config.id2label
     all_label_ids: list[int] = []
     all_scores: list[float] = []
 
     # Janelas com overlap pra textos longos.
-    step = _WINDOW - _OVERLAP
+    step = window - overlap
     pos = 0
     while pos < n_tokens:
-        end = min(pos + _WINDOW, n_tokens)
+        end = min(pos + window, n_tokens)
         window_ids = input_ids[pos:end].unsqueeze(0).to(device)
         with torch.no_grad():
             logits = model(input_ids=window_ids).logits[0]
@@ -137,7 +152,7 @@ def detectar_pii(
             scores_list = [1.0] * len(label_ids_list)
 
         # Aproveitar só a parte "nova" da janela quando há overlap.
-        keep_from = 0 if pos == 0 else _OVERLAP // 2
+        keep_from = 0 if pos == 0 else overlap // 2
         if pos == 0:
             all_label_ids.extend(label_ids_list)
             all_scores.extend(scores_list)
@@ -199,4 +214,46 @@ def detectar_pii(
             cur_end = off_e
 
     _flush()
-    return spans
+    return _merge_contiguous(spans, texto)
+
+
+# Cola entre spans (gap entre o fim do anterior e o início do próximo)
+# que conta como "ainda no meio da entidade". Vazio, espaços e
+# pontuação típica de separação intra-token (".", "/", "-") cobrem os
+# casos comuns: datas (12/05/2023), siglas (T.J.S.P), CNPJ (XYZ S/A).
+# Vírgulas, ponto e vírgula e ponto final NÃO entram — separam entidades
+# distintas no texto natural.
+_INNER_GAP_CHARS = frozenset(" \t./-_")
+
+
+def _merge_contiguous(spans: list, texto: str) -> list:
+    """Mescla spans adjacentes de mesmo label separados só por espaço/pontuação intra-token.
+
+    Modelos NER em PT-BR como o LeNER-Br rotulam um BIO por *palavra*; com
+    sub-word tokenization o resultado vem fragmentado em datas (12/05/2023
+    → 6 spans TEMPO) e siglas (TJSP → 3 spans). Como o decoder já cobriu
+    `B-X` consecutivos como inícios novos, mesclamos aqui. ``texto`` é o
+    original; o gap entre spans é checado char-a-char.
+    """
+    if len(spans) < 2:
+        return list(spans)
+    spans = sorted(spans, key=lambda s: s.start)
+    out: list = [spans[0]]
+    for s in spans[1:]:
+        prev = out[-1]
+        gap = texto[prev.end : s.start]
+        if (
+            s.label == prev.label
+            and (not gap or all(c in _INNER_GAP_CHARS for c in gap))
+        ):
+            from labdados_core.anonimizacao.strategies import _Span
+
+            out[-1] = _Span(
+                start=prev.start,
+                end=s.end,
+                label=prev.label,
+                texto=texto[prev.start : s.end],
+            )
+        else:
+            out.append(s)
+    return out

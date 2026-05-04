@@ -8,6 +8,41 @@ versionamento seguindo [SemVer](https://semver.org/lang/pt-BR/) — ver
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-05-04
+
+### Adicionado
+- Suporte ao modelo `pierreguillou/ner-bert-base-cased-pt-lenerbr` no
+  pipeline de anonimização — BERT base PT-BR fine-tuned em LeNER-Br
+  (decisões judiciais brasileiras), 110M params, 6 categorias
+  (`PESSOA`, `ORGANIZACAO`, `LOCAL`, `TEMPO`, `LEGISLACAO`,
+  `JURISPRUDENCIA`). Alternativa rápida e especializada em texto
+  jurídico ao `openai/privacy-filter` (multilíngue, 8 categorias PII).
+- `LABEL_PT` em `anonimizacao.strategies` ganhou entradas explícitas
+  pras categorias do LeNER-Br (`TEMPO` → `DATA`; demais idem).
+
+### Mudado
+- Engine `anonimizacao._engine.detectar_pii`:
+  - Clampa o tamanho da janela ao `tokenizer.model_max_length`. Permite
+    rodar BERT-base (max 512 posições) sem estourar o positional
+    embedding; `openai/privacy-filter` (128k) continua usando 2048.
+  - Liga `add_special_tokens=True` automaticamente quando o tokenizer
+    tem `cls_token_id` (BERT-style). Sem isso, a primeira palavra do
+    texto ficava colada no embedding posicional 0 (treinado pra `[CLS]`)
+    e o modelo errava a label dela.
+  - Pós-processamento `_merge_contiguous` mescla spans adjacentes de
+    mesma label separados só por espaço/pontuação intra-token (`/`,
+    `.`, `-`, `_`). Resolve fragmentação típica de NER PT-BR — datas
+    (`12/05/2023`), siglas (`TJSP`), CNPJs (`XYZ S/A`) — que vinham em
+    spans separados por causa da tokenização sub-word.
+
+## [0.10.0] - 2026-05-03
+
+### Adicionado
+- Subpacote `labdados_core.anonimizacao` — detecção e mascaramento de
+  PII com `openai/privacy-filter` via HF Transformers (CPU/CUDA).
+  Pipeline de alto nível em `pipeline.anonimizar(...)` + estratégias
+  `categoria` / `asteriscos` / `pseudonimo` em `strategies`.
+
 ## [0.9.1] - 2026-05-03
 
 ### Mudado
