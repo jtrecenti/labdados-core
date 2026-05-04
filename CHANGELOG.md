@@ -8,6 +8,18 @@ versionamento seguindo [SemVer](https://semver.org/lang/pt-BR/) — ver
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-05-04
+
+### Corrigido
+- `anonimizacao._engine.detectar_pii` quebrava com `RuntimeError: tensor
+  size mismatch (2040 vs 512)` ao processar textos longos com modelos
+  BERT (LeNER-Br). O tokenizer do BERT-base reporta
+  `model_max_length = 1e30` (sentinela "infinito" do HF), o que fazia o
+  clamp da janela cair no fallback default 2048 — estourando o
+  `max_position_embeddings = 512` do modelo. Agora o engine consulta
+  primeiro `model.config.max_position_embeddings` (fonte canônica) e
+  só depois cai no `tokenizer.model_max_length`.
+
 ## [0.11.0] - 2026-05-04
 
 ### Adicionado
