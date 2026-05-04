@@ -122,12 +122,17 @@ def detectar_pii(
     if n_tokens == 0:
         return []
 
-    # Clamp window ao max-position-embedding do modelo. BERT-base tem 512.
-    # Reservamos 8 pra eventual special token; overlap proporcional.
-    tok_max = getattr(tokenizer, "model_max_length", _WINDOW_DEFAULT)
-    if not isinstance(tok_max, int) or tok_max <= 0 or tok_max > 100_000:
-        tok_max = _WINDOW_DEFAULT
-    window = min(_WINDOW_DEFAULT, max(64, tok_max - 8))
+    # Clamp window ao limite do modelo. ``model.config.max_position_embeddings``
+    # é a fonte canônica (BERT 512, privacy-filter 128k); ``tokenizer.model_max_length``
+    # vem com sentinela ~1e30 em alguns BERTs e não dá pra confiar sozinho.
+    # Reservamos 8 tokens pra special tokens; overlap proporcional.
+    cfg_max = getattr(model.config, "max_position_embeddings", None)
+    tok_max = getattr(tokenizer, "model_max_length", None)
+    candidates = [
+        v for v in (cfg_max, tok_max) if isinstance(v, int) and 0 < v <= 100_000
+    ]
+    hard_max = min(candidates) if candidates else _WINDOW_DEFAULT
+    window = min(_WINDOW_DEFAULT, max(64, hard_max - 8))
     overlap = min(_OVERLAP_DEFAULT, max(8, window // 16))
 
     id2label = model.config.id2label
