@@ -26,7 +26,10 @@ from typing import Literal
 EstrategiaMascaramento = Literal["categoria", "asteriscos", "pseudonimo"]
 
 # Mapa label técnico → rótulo em português (mostrado ao usuário final).
+# Cobre as 8 categorias do openai/privacy-filter e as 6 do LeNER-Br
+# (pierreguillou/ner-bert-base-cased-pt-lenerbr).
 LABEL_PT: dict[str, str] = {
+    # privacy-filter
     "account_number": "CONTA",
     "private_address": "ENDERECO",
     "private_email": "EMAIL",
@@ -35,6 +38,13 @@ LABEL_PT: dict[str, str] = {
     "private_url": "URL",
     "private_date": "DATA",
     "secret": "SEGREDO",
+    # LeNER-Br (já vêm em maiúsculas; explicitar evita depender do fallback)
+    "PESSOA": "PESSOA",
+    "ORGANIZACAO": "ORGANIZACAO",
+    "LOCAL": "LOCAL",
+    "TEMPO": "DATA",
+    "LEGISLACAO": "LEGISLACAO",
+    "JURISPRUDENCIA": "JURISPRUDENCIA",
 }
 
 
