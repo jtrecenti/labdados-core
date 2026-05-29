@@ -97,12 +97,64 @@ def _make_client(config: LlmConfig):
     return OpenAI(**kwargs)
 
 
+def _strictify_schema(schema: Any) -> Any:
+    """Normaliza um JSON Schema para o modo *strict* de structured outputs.
+
+    Azure OpenAI / OpenAI exigem, em ``response_format`` com
+    ``strict: True``, que **todo** objeto declare ``additionalProperties:
+    false`` e que ``required`` liste **todas** as propriedades — caso
+    contrário a API responde ``400 Invalid schema for response_format``
+    (vLLM/guided decoding aceita o mesmo schema sem reclamar).
+
+    O SchemaBuilder do front já preenche ``required`` com todos os campos,
+    mas não emite ``additionalProperties: false``; schemas colados à mão
+    podem faltar ambos. Esta função recursa pela estrutura do schema
+    (``properties``, ``items``, combinadores e ``$defs``) e devolve uma
+    cópia normalizada, sem mutar a entrada.
+    """
+    if not isinstance(schema, dict):
+        return schema
+
+    out = dict(schema)
+
+    props = out.get("properties")
+    if isinstance(props, dict):
+        out["properties"] = {k: _strictify_schema(v) for k, v in props.items()}
+        out["required"] = list(out["properties"].keys())
+        out["additionalProperties"] = False
+    elif out.get("type") == "object":
+        # Objeto sem properties declaradas (free-form) — strict ainda exige a flag.
+        out["additionalProperties"] = False
+
+    if "items" in out:
+        items = out["items"]
+        out["items"] = (
+            [_strictify_schema(i) for i in items]
+            if isinstance(items, list)
+            else _strictify_schema(items)
+        )
+
+    for combiner in ("anyOf", "oneOf", "allOf"):
+        if isinstance(out.get(combiner), list):
+            out[combiner] = [_strictify_schema(s) for s in out[combiner]]
+
+    for defs_key in ("$defs", "definitions"):
+        if isinstance(out.get(defs_key), dict):
+            out[defs_key] = {k: _strictify_schema(v) for k, v in out[defs_key].items()}
+
+    return out
+
+
 def _build_response_format(schema: dict[str, Any] | None) -> dict[str, Any]:
     if not schema:
         return {"type": "json_object"}
     return {
         "type": "json_schema",
-        "json_schema": {"name": "extraction", "schema": schema, "strict": True},
+        "json_schema": {
+            "name": "extraction",
+            "schema": _strictify_schema(schema),
+            "strict": True,
+        },
     }
 
 

@@ -94,7 +94,50 @@ def test_call_llm_with_schema_uses_json_schema(monkeypatch):
     rf = client.chat.completions.create.call_args.kwargs["response_format"]
     assert rf["type"] == "json_schema"
     assert rf["json_schema"]["strict"] is True
-    assert rf["json_schema"]["schema"] == schema
+    # strict mode exige additionalProperties:false e required completo (ver _strictify_schema)
+    sent = rf["json_schema"]["schema"]
+    assert sent["additionalProperties"] is False
+    assert sent["required"] == ["a"]
+    assert sent["properties"] == {"a": {"type": "string"}}
+
+
+def test_strictify_schema_nested_and_arrays():
+    """additionalProperties:false + required completo em objetos aninhados e items."""
+    from labdados_core.estruturacao._llm import _strictify_schema
+
+    schema = {
+        "type": "object",
+        "properties": {
+            "autor": {"type": "string"},
+            "enderecos": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "cidade": {"type": "string"},
+                        "uf": {"type": "string"},
+                    },
+                },
+            },
+        },
+    }
+    out = _strictify_schema(schema)
+
+    assert out["additionalProperties"] is False
+    assert sorted(out["required"]) == ["autor", "enderecos"]
+    item = out["properties"]["enderecos"]["items"]
+    assert item["additionalProperties"] is False
+    assert sorted(item["required"]) == ["cidade", "uf"]
+    # Não muta a entrada original.
+    assert "additionalProperties" not in schema
+    assert "required" not in schema
+
+
+def test_strictify_schema_ignores_non_dict():
+    from labdados_core.estruturacao._llm import _strictify_schema
+
+    assert _strictify_schema(None) is None
+    assert _strictify_schema("x") == "x"
 
 
 def test_call_llm_invalid_json_returns_raw(monkeypatch):
